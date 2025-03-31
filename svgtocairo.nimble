@@ -2,7 +2,7 @@
 
 version       = "0.1.0"
 author        = "Sean Wilkerson"
-description   = "A minimal SVG-to-Cairo-surface library"
+description   = "A minimal library to convert SVGs to Cairo surfaces"
 license       = "MIT"
 srcDir        = "src"
 

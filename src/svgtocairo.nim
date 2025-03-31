@@ -1,4 +1,4 @@
-import std/[streams, parsexml, paths, strutils]
+import std/[streams, parsexml, strutils]
 import cairo
 import svgtocairo/shapes
 
@@ -35,28 +35,31 @@ proc parseMetaData(p: var XmlParser): MetaData =
 
 proc loadShape(p: var XmlParser, target: ptr Surface) =
   case p.elementName:
-    of "rect": echo p.parseRect().shape.id
-    of "circle": echo p.parseCircle().shape.id
-    of "path": echo p.parsePath().shape.id
+    of "rect": p.parseRect().draw(target)
+    # of "circle": echo p.parseCircle().draw(target)
+    # of "path": echo p.parsePath().draw(target)
     else: discard
 
 proc loadShapes(p: var XmlParser, target: ptr Surface) =
-  let startName = p.elementName
   while true:
-    p.next()
+    # The token loadShapes starts with when called should be an xmlElementOpen.
     case p.kind:
       of xmlElementOpen:
         if p.elementName == "path" or p.elementName == "rect" or p.elementName == "circle":
           loadShape(p, target)
-      of xmlElementClose:
-        # Only break if the closing tag has the same name
-        # as the tag this function started with. This doesn't yet
-        # account for nesting. In that case, this will need to use
-        # recursion, or be refactored to use a stack.
-        echo p.elementName
-        if p.elementName == startName:
-          break
-      else: discard
+      of xmlElementEnd:
+        break
+      of xmlAttribute, xmlWhitespace: discard
+      else: raise newException(SvgToCairoError, "Unexpected token when loading shapes")
+    p.next()
+
+template skipToKind(p: var XmlParser, targetKind: XmlEventKind) =
+  ## Consumes and ignores tokens until hitting a token of `targetKind`. Using this
+  ## by definition means ignoring potentially important information in the SVG data,
+  ## which is a signal of incomplete SVG-to-Cairo implementation. Get away
+  ## from using this eventually.
+  p.next()
+  while p.kind != targetKind: p.next()
 
 proc svgToSurface*(s: var FileStream, inFile: string, outFile: cstring = nil): ptr Surface =
   var p: XmlParser
@@ -72,6 +75,8 @@ proc svgToSurface*(s: var FileStream, inFile: string, outFile: cstring = nil): p
           of "defs":
             discard # TODO: Parse defs
           of "g":
+            # Skip tokens until <g> is over hits first nested shape.
+            p.skipToKind(xmlElementOpen)
             loadShapes(p, result)
       of xmlEof:
         break
@@ -82,5 +87,3 @@ proc svgToSurface*(inFile: string, outFile: cstring = nil): ptr Surface =
   if s.isNil:
     raise newException(SvgToCairoError, "Failed to open SVG")
   s.svgToSurface(inFile, outFile)
-
-proc svgToSurface*(p: paths.Path): ptr Surface = svgToSurface($p)
