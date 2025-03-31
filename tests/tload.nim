@@ -1,5 +1,5 @@
 import unittest
 import svgtocairo
 
-# test "can add":
-#   check add(5, 5) == 10
+test "pathssvg":
+  let pathsSfc = svgToSurface("tests/paths.svg")
