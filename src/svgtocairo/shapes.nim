@@ -34,7 +34,7 @@ func `$`(r: Rect): string = fmt"Rect[size=<{r.width},{r.height}>, shape=<{r.shap
 func `$`(c: Circle): string = fmt"Circle[radius=<c.radius>, shape=<{c.shape}>]"
 func `$`(p: Path): string = fmt"Path[data=<p.data>, shape=<{p.shape}>]"
 
-func initStyle*(styleStr: string, scale = 1.0): Style =
+func initStyle*(styleStr: string, scale = DefaultScale): Style =
   for attrib in styleStr.strip.split(';'):
     let splits = attrib.split(":")
     case splits[0]:
@@ -47,7 +47,8 @@ func initStyle*(styleStr: string, scale = 1.0): Style =
       of "fill-opacity":
         result.fill.a = splits[1].parseFloat()
       of "stroke-width":
-        result.stroke.width = splits[1].parseFloat()*scale
+        # This should scale non-axially as well. Using X scale for the time-being.
+        result.stroke.width = splits[1].parseFloat() * scale.x
       of "stroke":
         let parsedColor = splits[1].parseHtmlColor()
         result.stroke.color.r = parsedColor.r
@@ -60,11 +61,11 @@ func initStyle*(styleStr: string, scale = 1.0): Style =
 
 # func initStyle*(p: var XmlParser): Style = discard
 
-func initShape(id: string, point: Vec2, styleStr: string): Shape =
+func initShape(id: string, point: Vec2, styleStr: string, scale = DefaultScale): Shape =
   Shape(
     id: id,
     point: point,
-    style: initStyle(styleStr),
+    style: initStyle(styleStr, scale),
   )
 
 proc apply(s: Stroke, ctx: ptr Context) =
@@ -97,7 +98,7 @@ proc parseRect*(p: var XmlParser, scale = DefaultScale): Rect =
         break
       else: discard
   Rect(
-    shape: initShape(id, point, styleStr),
+    shape: initShape(id, point, styleStr, scale),
     width: width,
     height: height,
   )
@@ -123,7 +124,7 @@ proc parseCircle*(p: var XmlParser, scale = DefaultScale): Circle =
         break
       else: discard
   Circle(
-    shape: initShape(id, point, styleStr),
+    shape: initShape(id, point, styleStr, scale),
     radius: radius,
   )
 
@@ -146,7 +147,7 @@ proc parsePath*(p: var XmlParser, scale = DefaultScale): Path =
         break
       else: discard
   Path(
-    shape: initShape(id, point, styleStr),
+    shape: initShape(id, point, styleStr, scale),
     data: data,
   )
 
@@ -170,13 +171,13 @@ proc draw*(r: Rect, target: ptr Surface) =
 
 proc draw*(c: Circle, target: ptr Surface) =
   withCtx(target, ctx):
+    # ctx.translate(c.shape.point.x, c.shape.point.y)
+    # ctx.arc(0, 0, c.radius, 0, 2*Pi)
+    # ctx.setSourceRgba(c.shape.style.fill.r,
+    #                   c.shape.style.fill.g,
+    #                   c.shape.style.fill.b,
+    #                   c.shape.style.fill.a)
+    # ctx.fill()
     ctx.translate(c.shape.point.x, c.shape.point.y)
     ctx.arc(0, 0, c.radius, 0, 2*Pi)
-    ctx.setSourceRgba(c.shape.style.fill.r,
-                      c.shape.style.fill.g,
-                      c.shape.style.fill.b,
-                      c.shape.style.fill.a)
-    ctx.fill()
-    # ctx.translate(c.shape.x, c.shape.y)
-    # ctx.arc(0, 0, c.radius, 0, 2*Pi)
-    # c.shape.style.stroke.apply(ctx)
+    c.shape.style.stroke.apply(ctx)
