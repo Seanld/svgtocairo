@@ -153,9 +153,10 @@ proc parsePath*(p: var XmlParser, scale = DefaultScale): Path =
 template withCtx(target: ptr Surface, ctx: untyped, body: untyped) =
   ## Creates a Cairo `Context` of a given symbol name for the given target surface,
   ## does the given drawing actions, then destroys the context when finished.
-  let ctx = create target
-  body
-  destroy ctx
+  block:
+    let ctx = create target
+    body
+    destroy ctx
 
 proc draw*(r: Rect, target: ptr Surface) =
   withCtx(target, ctx):
