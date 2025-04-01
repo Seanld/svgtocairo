@@ -1,8 +1,10 @@
-import std/[parsexml, strutils, strformat]
+import std/[parsexml, strutils, strformat, math]
 import cairo
 import chroma
 
 type
+  Vec2* = object
+    x*, y*: float64
   Stroke* = object
     width*: float64
     color*: Color
@@ -11,7 +13,7 @@ type
     stroke*: Stroke
   Shape* = object
     id*: string
-    x*, y*: float64
+    point*: Vec2
     style*: Style
   Rect* = object
     shape*: Shape
@@ -23,60 +25,88 @@ type
     shape*: Shape
     data*: string
 
+const DefaultScale* = Vec2(x: 1.0, y: 1.0)
+
 func `$`(s: Stroke): string = fmt"color=<{s.color}>, width=<{s.width}>"
 func `$`(s: Style): string = fmt"fill=<{s.fill}>, stroke=<{s.stroke}>"
-func `$`(s: Shape): string = fmt"id=<{s.id}>, pos=<{s.x},{s.y}>, style=<{s.style}>"
+func `$`(s: Shape): string = fmt"id=<{s.id}>, pos=<{s.point.x},{s.point.y}>, style=<{s.style}>"
 func `$`(r: Rect): string = fmt"Rect[size=<{r.width},{r.height}>, shape=<{r.shape}>]"
 func `$`(c: Circle): string = fmt"Circle[radius=<c.radius>, shape=<{c.shape}>]"
 func `$`(p: Path): string = fmt"Path[data=<p.data>, shape=<{p.shape}>]"
 
-func parseStyle*(styleStr: string): Style =
-  for attrib in styleStr.split(';'):
+func initStyle*(styleStr: string, scale = 1.0): Style =
+  for attrib in styleStr.strip.split(';'):
     let splits = attrib.split(":")
     case splits[0]:
       of "fill":
-        result.fill = parseHtmlColor(splits[1])
+        let parsedColor = splits[1].parseHtmlColor()
+        result.fill.r = parsedColor.r
+        result.fill.g = parsedColor.g
+        result.fill.b = parsedColor.b
+        result.fill.a = 1.0
+      of "fill-opacity":
+        result.fill.a = splits[1].parseFloat()
       of "stroke-width":
-        result.stroke.width = splits[1].parseFloat()
+        result.stroke.width = splits[1].parseFloat()*scale
+      of "stroke":
+        let parsedColor = splits[1].parseHtmlColor()
+        result.stroke.color.r = parsedColor.r
+        result.stroke.color.g = parsedColor.g
+        result.stroke.color.b = parsedColor.b
+        result.stroke.color.a = 0.0
+      of "stroke-opacity":
+        result.stroke.color.a = splits[1].parseFloat()
       else: discard
 
-func initShape(id: string, x, y: float64, styleStr: string): Shape =
+# func initStyle*(p: var XmlParser): Style = discard
+
+func initShape(id: string, point: Vec2, styleStr: string): Shape =
   Shape(
     id: id,
-    x: x,
-    y: y,
-    style: parseStyle(styleStr),
+    point: point,
+    style: initStyle(styleStr),
   )
 
-proc parseRect*(p: var XmlParser): Rect =
+proc apply(s: Stroke, ctx: ptr Context) =
+  if s.width > 0.0:
+    ctx.setLineWidth(s.width)
+    ctx.setSourceRgba(s.color.r,
+                      s.color.g,
+                      s.color.b,
+                      s.color.a)
+    ctx.stroke()
+
+proc parseRect*(p: var XmlParser, scale = DefaultScale): Rect =
   var
     id, styleStr: string
-    x, y, width, height: float64
+    point: Vec2
+    width, height: float64
   while true:
     p.next()
     case p.kind:
       of xmlAttribute:
         case p.attrKey:
           of "id": id = p.attrValue
-          of "x": x = p.attrValue.parseFloat()
-          of "y": y = p.attrValue.parseFloat()
+          of "x": point.x = p.attrValue.parseFloat() * scale.x
+          of "y": point.y = p.attrValue.parseFloat() * scale.y
           of "style": styleStr = p.attrValue
-          of "width": width = p.attrValue.parseFloat()
-          of "height": height = p.attrValue.parseFloat()
+          of "width": width = p.attrValue.parseFloat() * scale.x
+          of "height": height = p.attrValue.parseFloat() * scale.y
       of xmlElementClose:
         p.next()
         break
       else: discard
   Rect(
-    shape: initShape(id, x, y, styleStr),
+    shape: initShape(id, point, styleStr),
     width: width,
     height: height,
   )
 
-proc parseCircle*(p: var XmlParser): Circle =
+proc parseCircle*(p: var XmlParser, scale = DefaultScale): Circle =
   var
     id, styleStr: string
-    x, y, radius: float64
+    point: Vec2
+    radius: float64
   while true:
     p.next()
     case p.kind:
@@ -84,30 +114,31 @@ proc parseCircle*(p: var XmlParser): Circle =
         case p.attrKey:
           of "id": id = p.attrValue
           of "style": styleStr = p.attrValue
-          of "cx": x = p.attrValue.parseFloat()
-          of "cy": y = p.attrValue.parseFloat()
-          of "r": radius = p.attrValue.parseFloat()
+          of "cx": point.x = p.attrValue.parseFloat() * scale.x
+          of "cy": point.y = p.attrValue.parseFloat() * scale.y
+          # TODO: What do you do in this situation? Radius is not bound to an axis, but should scale.
+          of "r": radius = p.attrValue.parseFloat() * scale.x
       of xmlElementClose:
         p.next()
         break
       else: discard
   Circle(
-    shape: initShape(id, x, y, styleStr),
+    shape: initShape(id, point, styleStr),
     radius: radius,
   )
 
-proc parsePath*(p: var XmlParser): Path =
+proc parsePath*(p: var XmlParser, scale = DefaultScale): Path =
   var
     id, styleStr, data: string
-    x, y: float64
+    point: Vec2
   while true:
     p.next()
     case p.kind:
       of xmlAttribute:
         case p.attrKey:
           of "id": id = p.attrValue
-          of "x": x = p.attrValue.parseFloat()
-          of "y": y = p.attrValue.parseFloat()
+          of "x": point.x = p.attrValue.parseFloat() * scale.x
+          of "y": point.y = p.attrValue.parseFloat() * scale.y
           of "style": styleStr = p.attrValue
           of "d": data = p.attrValue
       of xmlElementClose:
@@ -115,28 +146,36 @@ proc parsePath*(p: var XmlParser): Path =
         break
       else: discard
   Path(
-    shape: initShape(id, x, y, styleStr),
+    shape: initShape(id, point, styleStr),
     data: data,
   )
 
-template withNamedCtx(target: ptr Surface, ctx: untyped, body: untyped) =
+template withCtx(target: ptr Surface, ctx: untyped, body: untyped) =
   ## Creates a Cairo `Context` of a given symbol name for the given target surface,
   ## does the given drawing actions, then destroys the context when finished.
   let ctx = create target
   body
   destroy ctx
 
-template withCtx(target: ptr Surface, body: untyped) =
-  ## Short form of `withNamedCtx` that defines a `ctx` variable automatically.
-  let ctx {.inject.} = create target
-  body
-  destroy ctx
-
 proc draw*(r: Rect, target: ptr Surface) =
-  withCtx target:
+  withCtx(target, ctx):
+    r.shape.style.stroke.apply(ctx)
     ctx.setSourceRgba(r.shape.style.fill.r,
                       r.shape.style.fill.g,
                       r.shape.style.fill.b,
                       r.shape.style.fill.a)
-    ctx.rectangle(r.shape.x, r.shape.y, r.width, r.height)
+    ctx.rectangle(r.shape.point.x, r.shape.point.y, r.width, r.height)
     ctx.fill()
+
+proc draw*(c: Circle, target: ptr Surface) =
+  withCtx(target, ctx):
+    ctx.translate(c.shape.point.x, c.shape.point.y)
+    ctx.arc(0, 0, c.radius, 0, 2*Pi)
+    ctx.setSourceRgba(c.shape.style.fill.r,
+                      c.shape.style.fill.g,
+                      c.shape.style.fill.b,
+                      c.shape.style.fill.a)
+    ctx.fill()
+    # ctx.translate(c.shape.x, c.shape.y)
+    # ctx.arc(0, 0, c.radius, 0, 2*Pi)
+    # c.shape.style.stroke.apply(ctx)

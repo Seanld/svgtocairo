@@ -5,18 +5,36 @@ import svgtocairo/shapes
 type
   SvgToCairoError = object of CatchableError
   ViewBox = object
-    x*, y*, w*, h*: float64
+    point*: Vec2
+    w*, h*: float64
   MetaData = object
     viewBox*: ViewBox
+    width*, height*: float64
+    scale*: Vec2 = DefaultScale
 
 func toViewBox(vbStr: string): ViewBox =
   let vbItems = vbStr.split(' ')
   ViewBox(
-    x: vbItems[0].parseFloat(),
-    y: vbItems[1].parseFloat(),
+    point: Vec2(
+      x: vbItems[0].parseFloat(),
+      y: vbItems[1].parseFloat(),
+    ),
     w: vbItems[2].parseFloat(),
     h: vbItems[3].parseFloat(),
   )
+
+func deunitized(unitized: string): float64 =
+  var val, unit: string
+  for c in unitized:
+    if (c >= '0' and c <= '9') or c == '.':
+      val &= c
+    else:
+      unit &= c
+  result = val.parseFloat()
+  case unit:
+    of "in":
+      result *= 96
+    else: discard
 
 proc parseMetaData(p: var XmlParser): MetaData =
   while true:
@@ -26,27 +44,33 @@ proc parseMetaData(p: var XmlParser): MetaData =
         case p.attrKey:
           of "viewBox":
             result.viewBox = toViewBox(p.attrValue)
+          of "width":
+            result.width = p.attrValue.deunitized
+          of "height":
+            result.height = p.attrValue.deunitized
           of "version":
             if p.attrValue != "1.1":
               raise newException(SvgToCairoError, "Only SVG 1.1 is supported")
       of xmlElementClose:
         break
       else: discard
+  result.scale.x = result.width / result.viewBox.w
+  result.scale.y = result.width / result.viewBox.h
 
-proc loadShape(p: var XmlParser, target: ptr Surface) =
+proc loadShape(p: var XmlParser, target: ptr Surface, scale = DefaultScale) =
   case p.elementName:
-    of "rect": p.parseRect().draw(target)
-    # of "circle": echo p.parseCircle().draw(target)
+    of "rect": p.parseRect(scale).draw(target)
+    of "circle": p.parseCircle(scale).draw(target)
     # of "path": echo p.parsePath().draw(target)
     else: discard
 
-proc loadShapes(p: var XmlParser, target: ptr Surface) =
+proc loadShapes(p: var XmlParser, target: ptr Surface, scale = DefaultScale) =
   while true:
     # The token loadShapes starts with when called should be an xmlElementOpen.
     case p.kind:
       of xmlElementOpen:
         if p.elementName == "path" or p.elementName == "rect" or p.elementName == "circle":
-          loadShape(p, target)
+          loadShape(p, target, scale)
       of xmlElementEnd:
         break
       of xmlAttribute, xmlWhitespace: discard
@@ -62,7 +86,9 @@ template skipToKind(p: var XmlParser, targetKind: XmlEventKind) =
   while p.kind != targetKind: p.next()
 
 proc svgToSurface*(s: var FileStream, inFile: string, outFile: cstring = nil): ptr Surface =
-  var p: XmlParser
+  var
+    p: XmlParser
+    metaData: MetaData
   p.open(s, inFile)
   while true:
     p.next()
@@ -70,14 +96,16 @@ proc svgToSurface*(s: var FileStream, inFile: string, outFile: cstring = nil): p
       of xmlElementOpen:
         case p.elementName:
           of "svg":
-            let metaData = parseMetaData(p)
-            result = svgSurfaceCreate(outFile, metaData.viewBox.w, metaData.viewBox.h)
+            metaData = parseMetaData(p)
+            result = svgSurfaceCreate(outFile, metaData.width, metaData.height)
           of "defs":
             discard # TODO: Parse defs
           of "g":
             # Skip tokens until <g> is over hits first nested shape.
             p.skipToKind(xmlElementOpen)
-            loadShapes(p, result)
+            loadShapes(p, result, metaData.scale)
+          of "rect", "circle":
+            loadShape(p, result, metaData.scale)
       of xmlEof:
         break
       else: discard

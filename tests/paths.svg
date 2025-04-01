@@ -7,8 +7,31 @@
    viewBox="0 0 300.003 300.003"
    version="1.1"
    id="svg1"
+   sodipodi:docname="paths.svg"
+   inkscape:version="1.4 (e7c3feb100, 2024-10-09)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="in"
+     inkscape:zoom="0.88229167"
+     inkscape:cx="415.96222"
+     inkscape:cy="373.45927"
+     inkscape:window-width="1916"
+     inkscape:window-height="1058"
+     inkscape:window-x="0"
+     inkscape:window-y="18"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg1" />
   <defs
      id="defs1" />
   <g
@@ -27,12 +50,12 @@
        height="117.60093"
        x="178.11404"
        y="145.0031" />
-    <!-- <circle -->
-    <!--    style="fill:#ff0000;stroke-width:0.312503" -->
-    <!--    id="path2" -->
-    <!--    cx="179.54123" -->
-    <!--    cy="191.52968" -->
-    <!--    r="56.231514" /> -->
+    <circle
+       style="fill:#ff0000;stroke-width:7.500075;stroke-dasharray:none;stroke:#ffa113;stroke-opacity:1"
+       id="path2"
+       cx="179.54123"
+       cy="191.52968"
+       r="56.231514" />
     <!-- <path -->
     <!--    style="fill:#ff0000;stroke-width:0.312503" -->
     <!--    d="m 66.221885,235.77275 c 0,0 -89.627897,-106.75425 2.283514,-73.6433 91.911411,33.11094 26.260403,-13.70109 -2.283514,73.6433 z" -->
@@ -42,4 +65,10 @@
     <!--    d="m 143.29046,35.394458 119.88445,-1.141759 -2.85439,58.22959 -91.34053,-0.570878 z" -->
     <!--    id="path4" /> -->
   </g>
+  <circle
+     style="fill:#cc00ff;fill-opacity:0;stroke:#4200dc;stroke-width:3.00003;stroke-dasharray:none;stroke-opacity:1"
+     id="path1"
+     cx="163.1067"
+     cy="29.575266"
+     r="19.657812" />
 </svg>
