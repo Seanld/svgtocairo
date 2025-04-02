@@ -1,11 +1,9 @@
 import std/[parsexml, strutils, strformat, math]
 import cairo
 import chroma
-import ./pathdata
+import ./[pathdata, vector]
 
 type
-  Vec2* = object
-    x*, y*: float64
   Stroke* = object
     width*: float64
     color*: Color
@@ -186,51 +184,59 @@ proc draw*(c: Circle, target: ptr Surface) =
 
 type UnimplementedPathCmdError = object of CatchableError
 
-proc draw*(p: Path, target: ptr Surface) =
+proc draw*(p: Path, target: ptr Surface, scale = DefaultScale) =
+  ## All other shapes have scaling pre-calculated when the shape object is created,
+  ## but paths are different because their line commands need to know scaling at draw
+  ## time, not just at path object creation time. That is why `scale` is only an
+  ## argument in this draw function.
   var point: Vec2
   withCtx(target, ctx):
     ctx.setSourceRgba(p.shape.style.fill.r,
                       p.shape.style.fill.g,
                       p.shape.style.fill.b,
                       p.shape.style.fill.a)
+    ctx.newPath()
     for op in p.data.ops:
       case op.cmd:
         of 'M':
           for (group, idx) in op.groups:
-            point = Vec2(x: group[0], y: group[1])
+            point = Vec2(x: group[0], y: group[1]) * scale
             if idx == 0:
               ctx.moveTo(point.x, point.y)
             else:
               ctx.lineTo(point.x, point.y)
         of 'm':
           for (group, idx) in op.groups:
-            point.x += group[0]
-            point.y += group[1]
+            point += Vec2(x: group[0], y: group[1]) * scale
+            echo point
             if idx == 0:
               ctx.moveTo(point.x, point.y)
             else:
               ctx.lineTo(point.x, point.y)
         of 'L':
           for (group, _) in op.groups:
-            point = Vec2(x: group[0], y: group[1])
+            point = Vec2(x: group[0], y: group[1]) * scale
             ctx.lineTo(point.x, point.y)
         of 'H':
           for (group, _) in op.groups:
-            point.x = group[0]
+            point.x = group[0] * scale.x
             ctx.lineTo(point.x, point.y)
         of 'V':
           for (group, _) in op.groups:
-            point.y = group[0]
+            point.y = group[0] * scale.y
             ctx.lineTo(point.x, point.y)
         of 'C':
           for (group, _) in op.groups:
-            point = Vec2(x: group[4], y: group[5])
-            ctx.curveTo(group[0], group[1], group[2], group[3], group[4], group[5])
+            point = Vec2(x: group[4], y: group[5]) * scale
+            ctx.curveTo(group[0], group[1], group[2], group[3], point.x, point.y)
         of 'c':
           for (group, _) in op.groups:
-            point.x += group[0]
-            point.y += group[1]
-            ctx.curveTo(group[0], group[1], group[2], group[3], group[4], group[5])
+            let
+              control1 = point + (Vec2(x: group[0], y: group[1]) * scale)
+              control2 = point + (Vec2(x: group[2], y: group[3]) * scale)
+            point += (Vec2(x: group[4], y: group[5]) * scale)
+            ctx.curveTo(control1.x, control1.y, control2.x, control2.y, point.x, point.y)
         else:
           raise newException(UnimplementedPathCmdError, "Unimplemented path command")
+    ctx.closePath()
     ctx.fill()

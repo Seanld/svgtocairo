@@ -1,6 +1,6 @@
 import std/[streams, parsexml, strutils]
 import cairo
-import svgtocairo/shapes
+import svgtocairo/[shapes, vector]
 
 type
   SvgToCairoError = object of CatchableError
@@ -61,7 +61,7 @@ proc loadShape(p: var XmlParser, target: ptr Surface, scale = DefaultScale) =
   case p.elementName:
     of "rect": p.parseRect(scale).draw(target)
     of "circle": p.parseCircle(scale).draw(target)
-    of "path": p.parsePath(scale).draw(target)
+    of "path": p.parsePath(scale).draw(target, scale)
     else: discard
 
 proc loadShapes(p: var XmlParser, target: ptr Surface, scale = DefaultScale) =
