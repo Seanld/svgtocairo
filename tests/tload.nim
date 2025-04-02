@@ -10,8 +10,18 @@ proc createIfNotExist(dir: paths.Path) =
   if not dirExists(headStr):
     createDir(headStr)
 
+template testSurface(sfcPathStr: string) =
+  block:
+    let
+      sfcPath = Path(sfcPathStr)
+      (_, sfcFileName) = sfcPath.splitPath
+    createIfNotExist(sfcPathStr)
+    let sfc = svgToSurface(sfcPathStr, $(Path("tests/out") / sfcFileName))
+    sfc.flush()
+    sfc.finish()
+
 test "pathssvg":
   createIfNotExist(OutDir)
-  let pathsSfc = svgToSurface("tests/src/paths.svg", "tests/out/paths_out.svg")
+  let pathsSfc = svgToSurface("tests/img/paths.svg", "tests/out/paths_out.svg")
   pathsSfc.flush()
   pathsSfc.finish()
