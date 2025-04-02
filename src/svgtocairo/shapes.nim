@@ -208,7 +208,6 @@ proc draw*(p: Path, target: ptr Surface, scale = DefaultScale) =
         of 'm':
           for (group, idx) in op.groups:
             point += Vec2(x: group[0], y: group[1]) * scale
-            echo point
             if idx == 0:
               ctx.moveTo(point.x, point.y)
             else:
