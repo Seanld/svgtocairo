@@ -169,7 +169,7 @@ proc draw*(r: Rect, target: ptr Surface) =
                       r.shape.style.fill.b,
                       r.shape.style.fill.a)
     ctx.rectangle(r.shape.point.x, r.shape.point.y, r.width, r.height)
-    ctx.fill()
+    ctx.fillPreserve()
     ctx.rectangle(r.shape.point.x, r.shape.point.y, r.width, r.height)
     r.shape.style.stroke.apply(ctx)
 
@@ -181,7 +181,7 @@ proc draw*(c: Circle, target: ptr Surface) =
                       c.shape.style.fill.g,
                       c.shape.style.fill.b,
                       c.shape.style.fill.a)
-    ctx.fill()
+    ctx.fillPreserve()
     ctx.arc(0, 0, c.radius, 0, 2*Pi)
     c.shape.style.stroke.apply(ctx)
 
