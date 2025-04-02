@@ -33,16 +33,19 @@ func `$`(r: Rect): string = fmt"Rect[size=<{r.width},{r.height}>, shape=<{r.shap
 func `$`(c: Circle): string = fmt"Circle[radius=<c.radius>, shape=<{c.shape}>]"
 func `$`(p: Path): string = fmt"Path[data=<p.data>, shape=<{p.shape}>]"
 
-func initStyle*(styleStr: string, scale = DefaultScale): Style =
+proc initStyle*(styleStr: string, scale = DefaultScale): Style =
   for attrib in styleStr.strip.split(';'):
     let splits = attrib.split(":")
     case splits[0]:
       of "fill":
-        let parsedColor = splits[1].parseHtmlColor()
-        result.fill.r = parsedColor.r
-        result.fill.g = parsedColor.g
-        result.fill.b = parsedColor.b
-        result.fill.a = 1.0
+        if splits[1] != "none":
+          let parsedColor = splits[1].parseHtmlColor()
+          result.fill.r = parsedColor.r
+          result.fill.g = parsedColor.g
+          result.fill.b = parsedColor.b
+          result.fill.a = 1.0
+        else:
+          result.fill.a = 0.0
       of "fill-opacity":
         result.fill.a = splits[1].parseFloat()
       of "stroke-width":
@@ -60,7 +63,7 @@ func initStyle*(styleStr: string, scale = DefaultScale): Style =
 
 # func initStyle*(p: var XmlParser): Style = discard
 
-func initShape(id: string, point: Vec2, styleStr: string, scale = DefaultScale): Shape =
+proc initShape(id: string, point: Vec2, styleStr: string, scale = DefaultScale): Shape =
   Shape(
     id: id,
     point: point,
@@ -238,4 +241,5 @@ proc draw*(p: Path, target: ptr Surface, scale = DefaultScale) =
         else:
           raise newException(UnimplementedPathCmdError, "Unimplemented path command")
     ctx.closePath()
-    ctx.fill()
+    ctx.fillPreserve()
+    p.shape.style.stroke.apply(ctx)
