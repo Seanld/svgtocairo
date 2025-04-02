@@ -61,7 +61,7 @@ proc loadShape(p: var XmlParser, target: ptr Surface, scale = DefaultScale) =
   case p.elementName:
     of "rect": p.parseRect(scale).draw(target)
     of "circle": p.parseCircle(scale).draw(target)
-    # of "path": echo p.parsePath().draw(target)
+    of "path": p.parsePath(scale).draw(target)
     else: discard
 
 proc loadShapes(p: var XmlParser, target: ptr Surface, scale = DefaultScale) =
@@ -104,7 +104,7 @@ proc svgToSurface*(s: var FileStream, inFile: string, outFile: cstring = nil): p
             # Skip tokens until <g> is over hits first nested shape.
             p.skipToKind(xmlElementOpen)
             loadShapes(p, result, metaData.scale)
-          of "rect", "circle":
+          of "path", "rect", "circle":
             loadShape(p, result, metaData.scale)
       of xmlEof:
         break

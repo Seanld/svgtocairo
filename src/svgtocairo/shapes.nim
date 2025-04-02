@@ -1,6 +1,7 @@
 import std/[parsexml, strutils, strformat, math]
 import cairo
 import chroma
+import ./pathdata
 
 type
   Vec2* = object
@@ -67,15 +68,6 @@ func initShape(id: string, point: Vec2, styleStr: string, scale = DefaultScale):
     point: point,
     style: initStyle(styleStr, scale),
   )
-
-proc apply(s: Stroke, ctx: ptr Context) =
-  if s.width > 0.0:
-    ctx.setLineWidth(s.width)
-    ctx.setSourceRgba(s.color.r,
-                      s.color.g,
-                      s.color.b,
-                      s.color.a)
-    ctx.stroke()
 
 proc parseRect*(p: var XmlParser, scale = DefaultScale): Rect =
   var
@@ -159,6 +151,15 @@ template withCtx(target: ptr Surface, ctx: untyped, body: untyped) =
     body
     destroy ctx
 
+proc apply(s: Stroke, ctx: ptr Context) =
+  if s.width > 0.0:
+    ctx.setLineWidth(s.width)
+    ctx.setSourceRgba(s.color.r,
+                      s.color.g,
+                      s.color.b,
+                      s.color.a)
+    ctx.stroke()
+
 proc draw*(r: Rect, target: ptr Surface) =
   withCtx(target, ctx):
     r.shape.style.stroke.apply(ctx)
@@ -182,3 +183,54 @@ proc draw*(c: Circle, target: ptr Surface) =
     ctx.fill()
     ctx.arc(0, 0, c.radius, 0, 2*Pi)
     c.shape.style.stroke.apply(ctx)
+
+type UnimplementedPathCmdError = object of CatchableError
+
+proc draw*(p: Path, target: ptr Surface) =
+  var point: Vec2
+  withCtx(target, ctx):
+    ctx.setSourceRgba(p.shape.style.fill.r,
+                      p.shape.style.fill.g,
+                      p.shape.style.fill.b,
+                      p.shape.style.fill.a)
+    for op in p.data.ops:
+      case op.cmd:
+        of 'M':
+          for (group, idx) in op.groups:
+            point = Vec2(x: group[0], y: group[1])
+            if idx == 0:
+              ctx.moveTo(point.x, point.y)
+            else:
+              ctx.lineTo(point.x, point.y)
+        of 'm':
+          for (group, idx) in op.groups:
+            point.x += group[0]
+            point.y += group[1]
+            if idx == 0:
+              ctx.moveTo(point.x, point.y)
+            else:
+              ctx.lineTo(point.x, point.y)
+        of 'L':
+          for (group, _) in op.groups:
+            point = Vec2(x: group[0], y: group[1])
+            ctx.lineTo(point.x, point.y)
+        of 'H':
+          for (group, _) in op.groups:
+            point.x = group[0]
+            ctx.lineTo(point.x, point.y)
+        of 'V':
+          for (group, _) in op.groups:
+            point.y = group[0]
+            ctx.lineTo(point.x, point.y)
+        of 'C':
+          for (group, _) in op.groups:
+            point = Vec2(x: group[4], y: group[5])
+            ctx.curveTo(group[0], group[1], group[2], group[3], group[4], group[5])
+        of 'c':
+          for (group, _) in op.groups:
+            point.x += group[0]
+            point.y += group[1]
+            ctx.curveTo(group[0], group[1], group[2], group[3], group[4], group[5])
+        else:
+          raise newException(UnimplementedPathCmdError, "Unimplemented path command")
+    ctx.fill()
