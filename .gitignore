@@ -1,2 +1,5 @@
 /.projectile-cache.eld
-tests/out
+
+tests/*
+!tests/*.nim
+tests/img
