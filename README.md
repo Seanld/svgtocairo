@@ -14,5 +14,5 @@ of it is:
 
 ``` nim
 import svgtocairo
-discard svgToCairo("myfile.svg")
+discard svgToSurface("myfile.svg")
 ```
