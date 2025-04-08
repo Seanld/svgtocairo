@@ -1,11 +1,11 @@
-import std/[parsexml, strutils, strformat, math]
+import std/[parsexml, strutils, strformat, math, tables]
 import cairo
 import chroma
 import ./[pathdata, vector]
 
 type
   Stroke* = object
-    width*: float64
+    width*: float64 = 1.0
     color*: Color
   Style* = object
     fill*: Color
@@ -23,6 +23,7 @@ type
   Path* = object
     shape*: Shape
     data*: string
+  ClassMap* = TableRef[string, Style]
 
 const DefaultScale* = Vec2(x: 1.0, y: 1.0)
 
@@ -33,7 +34,10 @@ func `$`(r: Rect): string = fmt"Rect[size=<{r.width},{r.height}>, shape=<{r.shap
 func `$`(c: Circle): string = fmt"Circle[radius=<c.radius>, shape=<{c.shape}>]"
 func `$`(p: Path): string = fmt"Path[data=<p.data>, shape=<{p.shape}>]"
 
-proc initStyle*(styleStr: string, scale = DefaultScale): Style =
+proc initStyle*(styleStr: string, classMap: ClassMap,
+                className = "", scale = DefaultScale): Style =
+  if className != "" and classMap.contains(className):
+    result = classMap[className]
   for attrib in styleStr.strip.split(';'):
     let splits = attrib.split(":")
     case splits[0]:
@@ -63,18 +67,20 @@ proc initStyle*(styleStr: string, scale = DefaultScale): Style =
 
 # func initStyle*(p: var XmlParser): Style = discard
 
-proc initShape(id: string, point: Vec2, styleStr: string, scale = DefaultScale): Shape =
+proc initShape(id: string, point: Vec2, styleStr: string,
+               classMap: ClassMap, className = "", scale = DefaultScale): Shape =
   Shape(
     id: id,
     point: point,
-    style: initStyle(styleStr, scale),
+    style: initStyle(styleStr, classMap, className, scale),
   )
 
-proc parseRect*(p: var XmlParser, scale = DefaultScale): Rect =
+proc parseRect*(p: var XmlParser, classMap: ClassMap, scale = DefaultScale): Rect =
   var
     id, styleStr: string
     point: Vec2
     width, height: float64
+    className = ""
   while true:
     p.next()
     case p.kind:
@@ -86,21 +92,23 @@ proc parseRect*(p: var XmlParser, scale = DefaultScale): Rect =
           of "style": styleStr = p.attrValue
           of "width": width = p.attrValue.parseFloat() * scale.x
           of "height": height = p.attrValue.parseFloat() * scale.y
+          of "class": className = p.attrValue
       of xmlElementClose:
         p.next()
         break
       else: discard
   Rect(
-    shape: initShape(id, point, styleStr, scale),
+    shape: initShape(id, point, styleStr, classMap, className, scale),
     width: width,
     height: height,
   )
 
-proc parseCircle*(p: var XmlParser, scale = DefaultScale): Circle =
+proc parseCircle*(p: var XmlParser, classMap: ClassMap, scale = DefaultScale): Circle =
   var
     id, styleStr: string
     point: Vec2
     radius: float64
+    className = ""
   while true:
     p.next()
     case p.kind:
@@ -112,19 +120,21 @@ proc parseCircle*(p: var XmlParser, scale = DefaultScale): Circle =
           of "cy": point.y = p.attrValue.parseFloat() * scale.y
           # TODO: What do you do in this situation? Radius is not bound to an axis, but should scale.
           of "r": radius = p.attrValue.parseFloat() * scale.x
+          of "class": className = p.attrValue
       of xmlElementClose:
         p.next()
         break
       else: discard
   Circle(
-    shape: initShape(id, point, styleStr, scale),
+    shape: initShape(id, point, styleStr, classMap, className, scale),
     radius: radius,
   )
 
-proc parsePath*(p: var XmlParser, scale = DefaultScale): Path =
+proc parsePath*(p: var XmlParser, classMap: ClassMap, scale = DefaultScale): Path =
   var
     id, styleStr, data: string
     point: Vec2
+    className = ""
   while true:
     p.next()
     case p.kind:
@@ -135,12 +145,13 @@ proc parsePath*(p: var XmlParser, scale = DefaultScale): Path =
           of "y": point.y = p.attrValue.parseFloat() * scale.y
           of "style": styleStr = p.attrValue
           of "d": data = p.attrValue
+          of "class": className = p.attrValue
       of xmlElementClose:
         p.next()
         break
       else: discard
   Path(
-    shape: initShape(id, point, styleStr, scale),
+    shape: initShape(id, point, styleStr, classMap, className, scale),
     data: data,
   )
 
@@ -185,7 +196,7 @@ proc draw*(c: Circle, target: ptr Surface) =
     ctx.arc(0, 0, c.radius, 0, 2*Pi)
     c.shape.style.stroke.apply(ctx)
 
-type UnimplementedPathCmdError = object of CatchableError
+type UnimplementedPathCmdError* = object of CatchableError
 
 proc draw*(p: Path, target: ptr Surface, scale = DefaultScale) =
   ## All other shapes have scaling pre-calculated when the shape object is created,
@@ -219,13 +230,25 @@ proc draw*(p: Path, target: ptr Surface, scale = DefaultScale) =
           for (group, _) in op.groups:
             point = Vec2(x: group[0], y: group[1]) * scale
             ctx.lineTo(point.x, point.y)
+        of 'l':
+          for (group, _) in op.groups:
+            point += Vec2(x: group[0], y: group[1]) * scale
+            ctx.lineTo(point.x, point.y)
         of 'H':
           for (group, _) in op.groups:
             point.x = group[0] * scale.x
             ctx.lineTo(point.x, point.y)
+        of 'h':
+          for (group, _) in op.groups:
+            point.x += group[0] * scale.x
+            ctx.lineTo(point.x, point.y)
         of 'V':
           for (group, _) in op.groups:
             point.y = group[0] * scale.y
+            ctx.lineTo(point.x, point.y)
+        of 'v':
+          for (group, _) in op.groups:
+            point.y += group[0] * scale.y
             ctx.lineTo(point.x, point.y)
         of 'C':
           for (group, _) in op.groups:

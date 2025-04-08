@@ -1,6 +1,7 @@
 import std/[streams, parsexml, strutils]
 import cairo
-import svgtocairo/[shapes, vector]
+import stylus/parser, results
+import svgtocairo/[shapes, vector, styleparse]
 
 type
   SvgToCairoError = object of CatchableError
@@ -37,6 +38,7 @@ func deunitized(unitized: string): float64 =
     else: discard
 
 proc parseMetaData(p: var XmlParser): MetaData =
+  var widthOrHeightGiven = false
   while true:
     p.next()
     case p.kind:
@@ -46,31 +48,39 @@ proc parseMetaData(p: var XmlParser): MetaData =
             result.viewBox = toViewBox(p.attrValue)
           of "width":
             result.width = p.attrValue.deunitized
+            widthOrHeightGiven = true
           of "height":
             result.height = p.attrValue.deunitized
+            widthOrHeightGiven = true
           of "version":
             if p.attrValue != "1.1":
               raise newException(SvgToCairoError, "Only SVG 1.1 is supported")
       of xmlElementClose:
         break
       else: discard
-  result.scale.x = result.width / result.viewBox.w
-  result.scale.y = result.width / result.viewBox.h
+  if not widthOrHeightGiven:
+    result.width = result.viewBox.w
+    result.height = result.viewBox.h
+  else:
+    result.scale.x = result.width / result.viewBox.w
+    result.scale.y = result.width / result.viewBox.h
 
-proc loadShape(p: var XmlParser, target: ptr Surface, scale = DefaultScale) =
+proc loadShape(p: var XmlParser, target: ptr Surface,
+               classMap: ClassMap, scale = DefaultScale) =
   case p.elementName:
-    of "rect": p.parseRect(scale).draw(target)
-    of "circle": p.parseCircle(scale).draw(target)
-    of "path": p.parsePath(scale).draw(target, scale)
+    of "rect": p.parseRect(classMap, scale).draw(target)
+    of "circle": p.parseCircle(classMap, scale).draw(target)
+    of "path": p.parsePath(classMap, scale).draw(target, scale)
     else: discard
 
-proc loadShapes(p: var XmlParser, target: ptr Surface, scale = DefaultScale) =
+proc loadShapes(p: var XmlParser, target: ptr Surface,
+                classMap: ClassMap, scale = DefaultScale) =
   while true:
     # The token loadShapes starts with when called should be an xmlElementOpen.
     case p.kind:
       of xmlElementOpen:
         if p.elementName == "path" or p.elementName == "rect" or p.elementName == "circle":
-          loadShape(p, target, scale)
+          loadShape(p, target, classMap, scale)
       of xmlElementEnd:
         break
       of xmlAttribute, xmlWhitespace: discard
@@ -85,27 +95,41 @@ template skipToKind(p: var XmlParser, targetKind: XmlEventKind) =
   p.next()
   while p.kind != targetKind: p.next()
 
+proc parseDefs(p: var XmlParser): ClassMap =
+  while true:
+    p.next()
+    case p.kind:
+      of xmlElementOpen, xmlElementStart:
+        if p.elementName == "style":
+          p.skipToKind(xmlCharData)
+          let classes = parseClasses(newParser(newParserInput(p.charData)))
+          if classes.isErr: raise newException(SvgToCairoError, "Failed to parse style tag")
+          return classes.value
+      of xmlElementClose: break
+      else: discard
+
 proc svgToSurface*(s: var FileStream, inFile: string, outFile: cstring = nil): ptr Surface =
   var
     p: XmlParser
     metaData: MetaData
+    classMap: ClassMap
   p.open(s, inFile)
   while true:
     p.next()
     case p.kind:
-      of xmlElementOpen:
+      of xmlElementOpen, xmlElementStart:
         case p.elementName:
           of "svg":
             metaData = parseMetaData(p)
             result = svgSurfaceCreate(outFile, metaData.width, metaData.height)
           of "defs":
-            discard # TODO: Parse defs
+            classMap = parseDefs(p)
           of "g":
-            # Skip tokens until <g> is over hits first nested shape.
+            # Skip tokens until <g> attributes are over and hits first nested shape.
             p.skipToKind(xmlElementOpen)
-            loadShapes(p, result, metaData.scale)
+            loadShapes(p, result, classMap, metaData.scale)
           of "path", "rect", "circle":
-            loadShape(p, result, metaData.scale)
+            loadShape(p, result, classMap, metaData.scale)
       of xmlEof:
         break
       else: discard

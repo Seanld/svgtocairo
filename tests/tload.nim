@@ -25,3 +25,9 @@ test "pathssvg":
   let pathsSfc = svgToSurface("tests/img/paths.svg", "tests/out/paths_out.svg")
   pathsSfc.flush()
   pathsSfc.finish()
+
+test "internal":
+  createIfNotExist(OutDir)
+  let pathsSfc = svgToSurface("/mnt/nfs/assets/art/cs27561/cs27561_cut.svg", "tests/out/cs27561_cut.svg")
+  pathsSfc.flush()
+  pathsSfc.finish()
