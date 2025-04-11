@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.2.1"
+version       = "0.3.0"
 author        = "Sean Wilkerson"
 description   = "A minimal library to convert SVGs to Cairo surfaces"
 license       = "MIT"

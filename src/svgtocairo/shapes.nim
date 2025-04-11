@@ -1,15 +1,9 @@
 import std/[parsexml, strutils, strformat, math, tables]
 import cairo
 import chroma
-import ./[pathdata, vector]
+import ./[pathdata, vector, styleparse, common]
 
 type
-  Stroke* = object
-    width*: float64 = 1.0
-    color*: Color
-  Style* = object
-    fill*: Color
-    stroke*: Stroke
   Shape* = object
     id*: string
     point*: Vec2
@@ -23,9 +17,6 @@ type
   Path* = object
     shape*: Shape
     data*: string
-  ClassMap* = TableRef[string, Style]
-
-const DefaultScale* = Vec2(x: 1.0, y: 1.0)
 
 func `$`(s: Stroke): string = fmt"color=<{s.color}>, width=<{s.width}>"
 func `$`(s: Style): string = fmt"fill=<{s.fill}>, stroke=<{s.stroke}>"
@@ -34,46 +25,16 @@ func `$`(r: Rect): string = fmt"Rect[size=<{r.width},{r.height}>, shape=<{r.shap
 func `$`(c: Circle): string = fmt"Circle[radius=<c.radius>, shape=<{c.shape}>]"
 func `$`(p: Path): string = fmt"Path[data=<p.data>, shape=<{p.shape}>]"
 
-proc initStyle*(styleStr: string, classMap: ClassMap,
-                className = "", scale = DefaultScale): Style =
-  if className != "" and classMap.contains(className):
-    result = classMap[className]
-  for attrib in styleStr.strip.split(';'):
-    let splits = attrib.split(":")
-    case splits[0]:
-      of "fill":
-        if splits[1] != "none":
-          let parsedColor = splits[1].parseHtmlColor()
-          result.fill.r = parsedColor.r
-          result.fill.g = parsedColor.g
-          result.fill.b = parsedColor.b
-          result.fill.a = 1.0
-        else:
-          result.fill.a = 0.0
-      of "fill-opacity":
-        result.fill.a = splits[1].parseFloat()
-      of "stroke-width":
-        # This should scale non-axially as well. Using X scale for the time-being.
-        result.stroke.width = splits[1].parseFloat() * scale.x
-      of "stroke":
-        let parsedColor = splits[1].parseHtmlColor()
-        result.stroke.color.r = parsedColor.r
-        result.stroke.color.g = parsedColor.g
-        result.stroke.color.b = parsedColor.b
-        result.stroke.color.a = 0.0
-      of "stroke-opacity":
-        result.stroke.color.a = splits[1].parseFloat()
-      else: discard
+func initStyle(classMap: ClassMap, className, styleStr: string): Style =
+  if className.len > 0:
+    return classMap[className]
+  parseStyle(styleStr)
 
-# func initStyle*(p: var XmlParser): Style = discard
+func initShape(id: string, point: Vec2, style: Style, scale = DefaultScale): Shape =
+  Shape(id: id, point: point, style: style)
 
-proc initShape(id: string, point: Vec2, styleStr: string,
-               classMap: ClassMap, className = "", scale = DefaultScale): Shape =
-  Shape(
-    id: id,
-    point: point,
-    style: initStyle(styleStr, classMap, className, scale),
-  )
+func initShape(id: string, point: Vec2, styleStr: string, scale = DefaultScale): Shape =
+  initShape(id, point, parseStyle(styleStr), scale)
 
 proc parseRect*(p: var XmlParser, classMap: ClassMap, scale = DefaultScale): Rect =
   var
@@ -97,8 +58,9 @@ proc parseRect*(p: var XmlParser, classMap: ClassMap, scale = DefaultScale): Rec
         p.next()
         break
       else: discard
+  let style = initStyle(classMap, className, styleStr)
   Rect(
-    shape: initShape(id, point, styleStr, classMap, className, scale),
+    shape: initShape(id, point, style, scale),
     width: width,
     height: height,
   )
@@ -125,8 +87,9 @@ proc parseCircle*(p: var XmlParser, classMap: ClassMap, scale = DefaultScale): C
         p.next()
         break
       else: discard
+  let style = initStyle(classMap, className, styleStr)
   Circle(
-    shape: initShape(id, point, styleStr, classMap, className, scale),
+    shape: initShape(id, point, style, scale),
     radius: radius,
   )
 
@@ -150,8 +113,9 @@ proc parsePath*(p: var XmlParser, classMap: ClassMap, scale = DefaultScale): Pat
         p.next()
         break
       else: discard
+  let style = initStyle(classMap, className, styleStr)
   Path(
-    shape: initShape(id, point, styleStr, classMap, className, scale),
+    shape: initShape(id, point, style, scale),
     data: data,
   )
 

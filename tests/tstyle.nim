@@ -1,6 +1,6 @@
 import std/[unittest, tables]
-import svgtocairo/styleparse
-import stylus/parser, results, chroma
+import svgtocairo/[styleparse, common]
+import chroma
 
 const style1Sample = """.st0 {
   stroke: #f60;
@@ -24,13 +24,10 @@ const style1Sample = """.st0 {
 }"""
 
 test "style1":
-  let
-    p = newParser(newParserInput(style1Sample))
-    classes = parseClasses(p)
-  assert classes.isOk
-  assert classes.value["st0"].stroke.color == parseHtmlColor("#f60")
-  assert classes.value["st0"].fill == Color(a: 0, r: 0, g: 0, b: 0)
-  assert classes.value["st1"].stroke.width == 0.25 * DefaultStyleScale
-  assert classes.value["st2"].stroke.width == 0.25 * DefaultStyleScale
-  assert classes.value["st2"].stroke.color == parseHtmlColor("red")
-  assert classes.value["st1"].stroke.color == parseHtmlColor("blue")
+  let classes = parseStyleClasses(style1Sample)
+  assert classes["st0"].stroke.color == parseHtmlColor("#f60")
+  assert classes["st0"].fill == Color(a: 0, r: 0, g: 0, b: 0)
+  assert classes["st1"].stroke.width == 0.25 * Dpi300
+  assert classes["st2"].stroke.width == 0.25 * Dpi300
+  assert classes["st2"].stroke.color == parseHtmlColor("red")
+  assert classes["st1"].stroke.color == parseHtmlColor("blue")

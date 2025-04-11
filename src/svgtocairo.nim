@@ -1,7 +1,8 @@
 import std/[streams, parsexml, strutils]
-import cairo
-import stylus/parser, results
-import svgtocairo/[shapes, vector, styleparse]
+import cairo, stylus/parser
+import svgtocairo/[shapes, vector, styleparse, common]
+
+export common
 
 type
   SvgToCairoError = object of CatchableError
@@ -102,9 +103,7 @@ proc parseDefs(p: var XmlParser): ClassMap =
       of xmlElementOpen, xmlElementStart:
         if p.elementName == "style":
           p.skipToKind(xmlCharData)
-          let classes = parseClasses(newParser(newParserInput(p.charData)))
-          if classes.isErr: raise newException(SvgToCairoError, "Failed to parse style tag")
-          return classes.value
+          return parseStyleClasses(p.charData)
       of xmlElementClose: break
       else: discard
 

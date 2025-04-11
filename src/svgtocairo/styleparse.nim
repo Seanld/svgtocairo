@@ -4,87 +4,108 @@
 
 import std/tables
 import stylus, stylus/parser, results, chroma
-import ./shapes
+import ./common
 
 type
-  SvgCssParseError* = object of CatchableError
+  SvgStyleParseError = object of CatchableError
+  TokenAssertError = object of CatchableError
 
-template raiseParseError() = raise newException(SvgCssParseError, "Failed while parsing CSS classes")
-template unexpectedToken(p: parser.Parser) = err(p.newBasicError(bpUnexpectedToken))
+proc assertKind(tok: Token, kinds: varargs[TokenKind]) =
+  ## If `tok` is not one of `kinds`, raise a `TokenAssertError`.
+  for kind in kinds:
+    if tok.kind == kind: return
+  raise newException(TokenAssertError, "Unexpected token kind")
 
-func applyUnit(value: float64, unit: string, pxPerInch = 300.0): float64 =
-  case unit:
-    of "px": return value
-    else: raiseParseError()
+template multiAssertKind(pairings: openArray[(Token, seq[TokenKind])]) =
+  ## If any of the tokens in `pairings` are not one of their respective
+  ## possible kinds, raise a `TokenAssertError`.
+  for pair in pairings:
+    assertKind(pair[0].kind != pair[1])
 
-const DefaultStyleScale* = 300.0 / 96.0
-
-template ensureKind(p: parser.Parser, token: Token, targetKind: TokenKind) =
-  if token.kind != targetKind: return err(p.newBasicError(bpUnexpectedToken))
-
-proc parseAttributes(p: parser.Parser, clsNames: seq[string],
-                     clsMap: var ClassMap, scale = DefaultStyleScale): Result[void, BasicParseError] =
+proc nextTokenSkip*(t: Tokenizer): Token =
+  ## Consume and ignore whitespace tokens, and return the first non-whitespace token.
   while true:
-    let first = ? p.next()
-    if first.kind == tkCloseCurlyBracket: return ok()
-    p.ensureKind(first, tkIdent)
-    let colon = ? p.next()
-    p.ensureKind(colon, tkColon)
-    let value = ? p.next()
-    let semicolon = ? p.next()
-    p.ensureKind(semicolon, tkSemicolon)
-    case first.ident:
-      of "stroke":
-        var clr: Color
-        case value.kind:
-          of tkIdent:
-            if value.ident == "none": clr = Color(a: 0, r: 0, g: 0, b: 0)
-            else: clr = parseHtmlColor(value.ident)
-          of tkIDHash: clr = parseHtmlColor("#" & value.idHash)
-          else: return err(p.newBasicError(bpUnexpectedToken))
-        for clsName in clsNames:
-          clsMap[clsName].stroke.color = clr
-      of "fill":
-        var clr: Color
-        case value.kind:
-          of tkIdent:
-            if value.ident == "none": clr = Color(a: 0, r: 0, g: 0, b: 0)
-            else: clr = parseHtmlColor(value.ident)
-          of tkIDHash: clr = parseHtmlColor("#" & value.idHash)
-          else: return err(p.newBasicError(bpUnexpectedToken))
-        for clsName in clsNames:
-          clsMap[clsName].fill = clr
-      of "stroke-width":
-        for clsName in clsNames:
-          clsMap[clsName].stroke.width = value.dValue * scale
-      of "stroke-opacity":
-        for clsName in clsNames:
-          clsMap[clsName].stroke.color.a = value.dValue
-      of "fill-opacity":
-        for clsName in clsNames:
-          clsMap[clsName].fill.a = value.dValue
+    let tok = t.nextToken()
+    if tok.kind != tkWhitespace: return tok
+
+func color(tok: Token): Color =
+  ## Get a chroma color from the given token.
+  case tok.kind:
+    of tkIdent:
+      if tok.ident == "none":
+        return Color()
       else:
-        if first.kind != tkIdent: return err(p.newBasicError(bpUnexpectedToken))
+        return parseHtmlColor(tok.ident)
+    of tkIDHash, tkHash:
+      let val = if tok.kind == tkIDHash: tok.idHash else: tok.hash
+      if val[0] != '#':
+        return parseHtmlColor("#" & val)
+      else:
+        return parseHtmlColor(val)
+    else: raise newException(SvgStyleParseError, "Unknown token type for color value")
 
-proc parseClassNames(p: parser.Parser): Result[seq[string], BasicParseError] =
-  var names: seq[string]
+func number(tok: Token): float64 =
+  ## Get a number from the given numeric token.
+  case tok.kind:
+    of tkNumber: return tok.nValue
+    of tkDimension: return tok.dValue
+    else: raise newException(SvgStyleParseError, "Unknown token type for numeric value")
+
+template apply(classMap: var ClassMap, classes: openArray[string], attr, value: untyped) =
+  for class in classes:
+    classMap = value
+
+proc consumeAttributes(t: Tokenizer, classMap: var ClassMap, classNames: openArray[string], scale = Dpi300) =
+  ## Tokenizer must start with first token after opening curly bracket.
+  ## Loads consumed attributes into the `target` variable.
+  while not t.isEof:
+    let first = t.nextTokenSkip()
+    if first.kind == tkCloseCurlyBracket: break
+    assertKind(first, tkIdent)
+    let
+      colon = t.nextTokenSkip()
+      second = t.nextTokenSkip()
+    if not t.isEof: discard t.nextTokenSkip() # Consume semicolon if possible.
+    if first.kind != tkIdent or colon.kind != tkColon:
+      raise newException(SvgStyleParseError, "Bad structure while parsing class attributes")
+    case first.ident:
+      of "fill":
+        for className in classNames: classMap[className].fill = second.color
+      of "fill-opacity":
+        for className in classNames: classMap[className].fill.a = second.number
+      of "stroke":
+        for className in classNames: classMap[className].stroke.color = second.color
+      of "stroke-opacity":
+        for className in classNames: classMap[className].stroke.color.a = second.number
+      of "stroke-width":
+        for className in classNames: classMap[className].stroke.width = second.number * scale
+      else: discard
+
+proc consumeClassNames(t: Tokenizer): seq[string] =
+  ## Tokenizer must start with first delim token of class name list.
   while true:
-    let delim = ? p.next()
-    p.ensureKind(delim, tkDelim)
-    let name = ? p.next()
-    p.ensureKind(name, tkIdent)
-    names.add(name.ident)
-    let trailing = ? p.next()
-    if trailing.kind == tkCurlyBracketBlock: return ok(names)
-    elif trailing.kind == tkComma: continue
-    else: return err(p.newBasicError(bpUnexpectedToken))
+    let
+      before = t.nextTokenSkip()
+      middle = t.nextTokenSkip()
+      after = t.nextTokenSkip()
+    if before.kind != tkDelim or middle.kind != tkIdent or (after.kind != tkComma and after.kind != tkCurlyBracketBlock):
+      raise newException(SvgStyleParseError, "Bad structure while parsing class names")
+    result.add(middle.ident)
+    if after.kind == tkCurlyBracketBlock: break
 
-proc parseClasses*(p: parser.Parser, scale = DefaultStyleScale): Result[ClassMap, BasicParseError] =
-  var clsMap = newTable[string, Style]()
-  while not p.input.tokenizer.isEof:
-    let clsNames = parseClassNames(p)
-    if clsNames.isErr and clsNames.error.kind == bpEndOfInput: break
-    for clsName in clsNames.value:
-      if not clsMap.hasKey(clsName): clsMap[clsName] = Style()
-    p.parseAttributes(clsNames.value, clsMap).isOkOr: return err(p.newBasicError(bpUnexpectedToken))
-  ok(clsMap)
+proc parseStyleClasses*(classesStr: string): ClassMap =
+  let t = newTokenizer(classesStr)
+  while not t.isEof:
+    let classNames = t.consumeClassNames()
+    for className in classNames:
+      if not result.contains(className):
+        result[className] = Style()
+    t.consumeAttributes(result, classNames)
+
+proc parseStyle*(styleStr: string, scale = Dpi300): Style =
+  ## Parse a single style string, e.g. from `<elem style="..."/>`
+  let t = newTokenizer(styleStr)
+  var singleMap = {"style": Style()}.toTable
+  while not t.isEof:
+    t.consumeAttributes(singleMap, ["style"])
+  return singleMap["style"]
