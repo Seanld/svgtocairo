@@ -24,7 +24,7 @@ const style1Sample = """.st0 {
 }"""
 
 test "style1":
-  let classes = parseStyleClasses(style1Sample)
+  let classes = parseStyleClasses(style1Sample, Dpi300)
   assert classes["st0"].stroke.color == parseHtmlColor("#f60")
   assert classes["st0"].fill == Color(a: 0, r: 0, g: 0, b: 0)
   assert classes["st1"].stroke.width == 0.25 * Dpi300

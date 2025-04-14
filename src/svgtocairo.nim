@@ -12,7 +12,7 @@ type
   MetaData = object
     viewBox*: ViewBox
     width*, height*: float64
-    scale*: Vec2 = DefaultScale
+    scale*: float64
 
 func toViewBox(vbStr: string): ViewBox =
   let vbItems = vbStr.split(' ')
@@ -62,12 +62,10 @@ proc parseMetaData(p: var XmlParser): MetaData =
   if not widthOrHeightGiven:
     result.width = result.viewBox.w
     result.height = result.viewBox.h
-  else:
-    result.scale.x = result.width / result.viewBox.w
-    result.scale.y = result.width / result.viewBox.h
+  result.scale = result.width / result.viewBox.w
 
 proc loadShape(p: var XmlParser, target: ptr Surface,
-               classMap: ClassMap, scale = DefaultScale) =
+               classMap: ClassMap, scale: float64) =
   case p.elementName:
     of "rect": p.parseRect(classMap, scale).draw(target)
     of "circle": p.parseCircle(classMap, scale).draw(target)
@@ -75,7 +73,7 @@ proc loadShape(p: var XmlParser, target: ptr Surface,
     else: discard
 
 proc loadShapes(p: var XmlParser, target: ptr Surface,
-                classMap: ClassMap, scale = DefaultScale) =
+                classMap: ClassMap, scale: float64) =
   while true:
     # The token loadShapes starts with when called should be an xmlElementOpen.
     case p.kind:
@@ -96,14 +94,14 @@ template skipToKind(p: var XmlParser, targetKind: XmlEventKind) =
   p.next()
   while p.kind != targetKind: p.next()
 
-proc parseDefs(p: var XmlParser): ClassMap =
+proc parseDefs(p: var XmlParser, scale: float64): ClassMap =
   while true:
     p.next()
     case p.kind:
       of xmlElementOpen, xmlElementStart:
         if p.elementName == "style":
           p.skipToKind(xmlCharData)
-          return parseStyleClasses(p.charData)
+          return parseStyleClasses(p.charData, scale)
       of xmlElementClose: break
       else: discard
 
@@ -122,7 +120,7 @@ proc svgToSurface*(s: var FileStream, inFile: string, outFile: cstring = nil): p
             metaData = parseMetaData(p)
             result = svgSurfaceCreate(outFile, metaData.width, metaData.height)
           of "defs":
-            classMap = parseDefs(p)
+            classMap = parseDefs(p, metaData.scale)
           of "g":
             # Skip tokens until <g> attributes are over and hits first nested shape.
             p.skipToKind(xmlElementOpen)

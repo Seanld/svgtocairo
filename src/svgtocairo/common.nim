@@ -1,5 +1,4 @@
 import std/tables
-import ./vector
 import chroma
 
 type
@@ -11,6 +10,4 @@ type
     stroke*: Stroke
   ClassMap* = Table[string, Style]
 
-const
-  DefaultScale* = Vec2(x: 1.0, y: 1.0)
-  Dpi300* = 300.0/96.0
+const Dpi300* = 300.0/96.0

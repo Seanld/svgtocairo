@@ -25,18 +25,18 @@ func `$`(r: Rect): string = fmt"Rect[size=<{r.width},{r.height}>, shape=<{r.shap
 func `$`(c: Circle): string = fmt"Circle[radius=<c.radius>, shape=<{c.shape}>]"
 func `$`(p: Path): string = fmt"Path[data=<p.data>, shape=<{p.shape}>]"
 
-func initStyle(classMap: ClassMap, className, styleStr: string): Style =
+func initStyle(classMap: ClassMap, className, styleStr: string, scale: float64): Style =
   if className.len > 0:
     return classMap[className]
-  parseStyle(styleStr)
+  parseStyle(styleStr, scale)
 
-func initShape(id: string, point: Vec2, style: Style, scale = DefaultScale): Shape =
+func initShape(id: string, point: Vec2, style: Style, scale: float64): Shape =
   Shape(id: id, point: point, style: style)
 
-func initShape(id: string, point: Vec2, styleStr: string, scale = DefaultScale): Shape =
-  initShape(id, point, parseStyle(styleStr), scale)
+func initShape(id: string, point: Vec2, styleStr: string, scale: float64): Shape =
+  initShape(id, point, parseStyle(styleStr, scale), scale)
 
-proc parseRect*(p: var XmlParser, classMap: ClassMap, scale = DefaultScale): Rect =
+proc parseRect*(p: var XmlParser, classMap: ClassMap, scale: float64): Rect =
   var
     id, styleStr: string
     point: Vec2
@@ -48,24 +48,24 @@ proc parseRect*(p: var XmlParser, classMap: ClassMap, scale = DefaultScale): Rec
       of xmlAttribute:
         case p.attrKey:
           of "id": id = p.attrValue
-          of "x": point.x = p.attrValue.parseFloat() * scale.x
-          of "y": point.y = p.attrValue.parseFloat() * scale.y
+          of "x": point.x = p.attrValue.parseFloat() * scale
+          of "y": point.y = p.attrValue.parseFloat() * scale
           of "style": styleStr = p.attrValue
-          of "width": width = p.attrValue.parseFloat() * scale.x
-          of "height": height = p.attrValue.parseFloat() * scale.y
+          of "width": width = p.attrValue.parseFloat() * scale
+          of "height": height = p.attrValue.parseFloat() * scale
           of "class": className = p.attrValue
       of xmlElementClose:
         p.next()
         break
       else: discard
-  let style = initStyle(classMap, className, styleStr)
+  let style = initStyle(classMap, className, styleStr, scale)
   Rect(
     shape: initShape(id, point, style, scale),
     width: width,
     height: height,
   )
 
-proc parseCircle*(p: var XmlParser, classMap: ClassMap, scale = DefaultScale): Circle =
+proc parseCircle*(p: var XmlParser, classMap: ClassMap, scale: float64): Circle =
   var
     id, styleStr: string
     point: Vec2
@@ -78,22 +78,22 @@ proc parseCircle*(p: var XmlParser, classMap: ClassMap, scale = DefaultScale): C
         case p.attrKey:
           of "id": id = p.attrValue
           of "style": styleStr = p.attrValue
-          of "cx": point.x = p.attrValue.parseFloat() * scale.x
-          of "cy": point.y = p.attrValue.parseFloat() * scale.y
+          of "cx": point.x = p.attrValue.parseFloat() * scale
+          of "cy": point.y = p.attrValue.parseFloat() * scale
           # TODO: What do you do in this situation? Radius is not bound to an axis, but should scale.
-          of "r": radius = p.attrValue.parseFloat() * scale.x
+          of "r": radius = p.attrValue.parseFloat() * scale
           of "class": className = p.attrValue
       of xmlElementClose:
         p.next()
         break
       else: discard
-  let style = initStyle(classMap, className, styleStr)
+  let style = initStyle(classMap, className, styleStr, scale)
   Circle(
     shape: initShape(id, point, style, scale),
     radius: radius,
   )
 
-proc parsePath*(p: var XmlParser, classMap: ClassMap, scale = DefaultScale): Path =
+proc parsePath*(p: var XmlParser, classMap: ClassMap, scale: float64): Path =
   var
     id, styleStr, data: string
     point: Vec2
@@ -104,8 +104,8 @@ proc parsePath*(p: var XmlParser, classMap: ClassMap, scale = DefaultScale): Pat
       of xmlAttribute:
         case p.attrKey:
           of "id": id = p.attrValue
-          of "x": point.x = p.attrValue.parseFloat() * scale.x
-          of "y": point.y = p.attrValue.parseFloat() * scale.y
+          of "x": point.x = p.attrValue.parseFloat() * scale
+          of "y": point.y = p.attrValue.parseFloat() * scale
           of "style": styleStr = p.attrValue
           of "d": data = p.attrValue
           of "class": className = p.attrValue
@@ -113,7 +113,7 @@ proc parsePath*(p: var XmlParser, classMap: ClassMap, scale = DefaultScale): Pat
         p.next()
         break
       else: discard
-  let style = initStyle(classMap, className, styleStr)
+  let style = initStyle(classMap, className, styleStr, scale)
   Path(
     shape: initShape(id, point, style, scale),
     data: data,
@@ -162,7 +162,7 @@ proc draw*(c: Circle, target: ptr Surface) =
 
 type UnimplementedPathCmdError* = object of CatchableError
 
-proc draw*(p: Path, target: ptr Surface, scale = DefaultScale) =
+proc draw*(p: Path, target: ptr Surface, scale: float64) =
   ## All other shapes have scaling pre-calculated when the shape object is created,
   ## but paths are different because their line commands need to know scaling at draw
   ## time, not just at path object creation time. That is why `scale` is only an
@@ -200,19 +200,19 @@ proc draw*(p: Path, target: ptr Surface, scale = DefaultScale) =
             ctx.lineTo(point.x, point.y)
         of 'H':
           for (group, _) in op.groups:
-            point.x = group[0] * scale.x
+            point.x = group[0] * scale
             ctx.lineTo(point.x, point.y)
         of 'h':
           for (group, _) in op.groups:
-            point.x += group[0] * scale.x
+            point.x += group[0] * scale
             ctx.lineTo(point.x, point.y)
         of 'V':
           for (group, _) in op.groups:
-            point.y = group[0] * scale.y
+            point.y = group[0] * scale
             ctx.lineTo(point.x, point.y)
         of 'v':
           for (group, _) in op.groups:
-            point.y += group[0] * scale.y
+            point.y += group[0] * scale
             ctx.lineTo(point.x, point.y)
         of 'C':
           for (group, _) in op.groups:

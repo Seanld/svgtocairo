@@ -28,6 +28,9 @@ proc nextTokenSkip*(t: Tokenizer): Token =
     let tok = t.nextToken()
     if tok.kind != tkWhitespace: return tok
 
+proc maybeNextTokenSkip*(t: Tokenizer): Opt[Token] =
+  if t.isEof: Opt.none(Token) else: Opt.some(t.nextTokenSkip())
+
 func color(tok: Token): Color =
   ## Get a chroma color from the given token.
   case tok.kind:
@@ -55,7 +58,7 @@ template apply(classMap: var ClassMap, classes: openArray[string], attr, value: 
   for class in classes:
     classMap = value
 
-proc consumeAttributes(t: Tokenizer, classMap: var ClassMap, classNames: openArray[string], scale = Dpi300) =
+proc consumeAttributes(t: Tokenizer, classMap: var ClassMap, classNames: openArray[string], scale: float64) =
   ## Tokenizer must start with first token after opening curly bracket.
   ## Loads consumed attributes into the `target` variable.
   while not t.isEof:
@@ -65,7 +68,7 @@ proc consumeAttributes(t: Tokenizer, classMap: var ClassMap, classNames: openArr
     let
       colon = t.nextTokenSkip()
       second = t.nextTokenSkip()
-    if not t.isEof: discard t.nextTokenSkip() # Consume semicolon if possible.
+    if not t.isEof: discard t.maybeNextTokenSkip() # Consume semicolon if possible.
     if first.kind != tkIdent or colon.kind != tkColon:
       raise newException(SvgStyleParseError, "Bad structure while parsing class attributes")
     case first.ident:
@@ -93,19 +96,22 @@ proc consumeClassNames(t: Tokenizer): seq[string] =
     result.add(middle.ident)
     if after.kind == tkCurlyBracketBlock: break
 
-proc parseStyleClasses*(classesStr: string): ClassMap =
+proc parseStyleClasses*(classesStr: string, scale: float64): ClassMap =
   let t = newTokenizer(classesStr)
   while not t.isEof:
-    let classNames = t.consumeClassNames()
+    var classNames: seq[string]
+    try:
+      classNames = t.consumeClassNames()
+    except: break
     for className in classNames:
       if not result.contains(className):
         result[className] = Style()
-    t.consumeAttributes(result, classNames)
+    t.consumeAttributes(result, classNames, scale)
 
-proc parseStyle*(styleStr: string, scale = Dpi300): Style =
+proc parseStyle*(styleStr: string, scale: float64): Style =
   ## Parse a single style string, e.g. from `<elem style="..."/>`
   let t = newTokenizer(styleStr)
   var singleMap = {"style": Style()}.toTable
   while not t.isEof:
-    t.consumeAttributes(singleMap, ["style"])
+    t.consumeAttributes(singleMap, ["style"], scale)
   return singleMap["style"]
