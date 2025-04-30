@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.3.1"
+version       = "0.3.2"
 author        = "Sean Wilkerson"
 description   = "A minimal library to convert SVGs to Cairo surfaces"
 license       = "MIT"
@@ -16,7 +16,7 @@ requires "stylus >= 0.1.2"
 requires "pretty >= 0.2.0"
 
 
-task cleantest, "Clean up test files (e.g. test output/bin)":
+task tidy, "Clean up test files (e.g. test output/bin)":
   try:
     exec "rm -rf tests/out"
     exec "rm -f tests/tload"

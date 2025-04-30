@@ -105,11 +105,15 @@ proc parseDefs(p: var XmlParser, scale: float64): ClassMap =
       of xmlElementClose: break
       else: discard
 
-proc svgToSurface*(s: var FileStream, inFile: string, outFile: cstring = nil): ptr Surface =
+type WithDimsResult = tuple[surface: ptr Surface, width, height: float64]
+
+proc svgToSurface*(s: var FileStream, inFile: string, outFile: cstring = nil): WithDimsResult =
   var
     p: XmlParser
     metaData: MetaData
     classMap: ClassMap
+    surface: ptr Surface
+    width, height: float64
   p.open(s, inFile)
   while true:
     p.next()
@@ -118,20 +122,31 @@ proc svgToSurface*(s: var FileStream, inFile: string, outFile: cstring = nil): p
         case p.elementName:
           of "svg":
             metaData = parseMetaData(p)
-            result = svgSurfaceCreate(outFile, metaData.width, metaData.height)
+            surface = svgSurfaceCreate(outFile, metaData.width, metaData.height)
+            width = metaData.width
+            height = metaData.height
           of "defs":
             classMap = parseDefs(p, metaData.scale)
           of "g":
             # Skip tokens until <g> attributes are over and hits first nested shape.
             p.skipToKind(xmlElementOpen)
-            loadShapes(p, result, classMap, metaData.scale)
+            loadShapes(p, surface, classMap, metaData.scale)
           of "path", "rect", "circle":
-            loadShape(p, result, classMap, metaData.scale)
+            loadShape(p, surface, classMap, metaData.scale)
       of xmlEof:
         break
       else: discard
+  (surface: surface, width: width, height: height)
 
 proc svgToSurface*(inFile: string, outFile: cstring = nil): ptr Surface =
+  var s = newFileStream(inFile)
+  if s.isNil:
+    raise newException(SvgToCairoError, "Failed to open SVG")
+  let (surface, _, _) = s.svgToSurface(inFile, outFile)
+  return surface
+
+proc svgToSurfaceWithDims*(inFile: string,
+                           outFile: cstring = nil): WithDimsResult =
   var s = newFileStream(inFile)
   if s.isNil:
     raise newException(SvgToCairoError, "Failed to open SVG")
